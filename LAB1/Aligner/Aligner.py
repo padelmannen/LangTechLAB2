@@ -1,22 +1,20 @@
 from __future__ import print_function
 import argparse
 import codecs
+import time
+
 import numpy as np
 import json
 import requests
-
 
 """
 This file is part of the computer assignments for the course DD1418/DD2418 Language engineering at KTH.
 Created 2017 by Johan Boye and Patrik Jonell.
 """
 
-
 """
 This module computes the minimum-cost alignment of two strings.
 """
-
-
 
 """
 When printing the results, only print BREAKOFF characters per line.
@@ -41,21 +39,43 @@ def compute_backpointers(s0, s1):
     :param s1: The second string.
     :return: The backpointer array.
     """
+
     if s0 == None or s1 == None:
         raise Exception('Both s0 and s1 have to be set')
 
-    backptr = np.zeros((len(s0) + 1, len(s1) + 1))
+    backptr = [[[0, 0] for y in range(len(s1) + 1)] for x in range(len(s0) + 1)]
 
-
-    for t1 in range(len(s0) + 1):
-        backptr[t1][0] = t1
-
-    for t2 in range(len(s1) + 1):
-        backptr[0][t2] = t2
-
-    print(backptr)
     # YOUR CODE HERE
+    matrix = np.zeros((len(s0) + 1, len(s1) + 1))
+    for x in range(len(s0)):
+        backptr[x + 1][0][0] = x
+        matrix[x + 1, 0] = x + 1
+    for y in range(len(s1)):
+        backptr[0][y + 1][0] = y
+        matrix[0, y + 1] = y + 1
+    print(time.time())
 
+    for x in range(len(s0)):
+        for y in range(len(s1)):
+            if s0[x] == s1[y]:
+                matrix[x + 1, y + 1] = matrix[x, y]
+            else:
+                matrix[x + 1, y + 1] = min(matrix[x + 1, y], matrix[x, y + 1]) + 1
+    print(time.time())
+    for x in range(len(s0), 0, -1):
+        for y in range(len(s1), 0, -1):
+            left = matrix[x - 1, y]
+            up = matrix[x, y - 1]
+            diagonal = matrix[x - 1, y - 1] + 1
+
+            minimum = min(left, up, diagonal)
+            if diagonal == minimum:
+                backptr[x][y] = [x - 1, y - 1]
+            elif left == minimum:
+                backptr[x][y] = [x - 1, y]
+            else:
+                backptr[x][y] = [x, y - 1]
+    print(time.time())
     return backptr
 
 
@@ -65,7 +85,6 @@ def subst_cost(c0, c1):
     or 0 otherwise (when, in fact, there is no substitution).
     """
     return 0 if c0 == c1 else 2
-
 
 
 def align(s0, s1, backptr):
@@ -88,12 +107,35 @@ def align(s0, s1, backptr):
     the string <code>s1</code> padded with spaces.
     """
     result = ['', '']
-
     # YOUR CODE HERE
 
+    s0counter = len(s0) - 1
+    s1counter = len(s1) - 1
+
+    cur = [len(s0), len(s1)]
+
+    while cur != [0, 0]:
+        next = backptr[cur[0]][cur[1]]
+
+        if next[0] != cur[0] and next[1] != cur[1]:
+            result[0] = result[0] + s0[s0counter]
+            result[1] = result[1] + s1[s1counter]
+            s0counter -= 1
+            s1counter -= 1
+
+        elif next[0] != cur[0] and next[1] == cur[1]:
+            result[0] = result[0] + s0[s0counter]
+            result[1] = result[1] + " "
+            s0counter -= 1
+
+        else:
+            result[0] = result[0] + " "
+            result[1] = result[1] + s1[s1counter]
+            s1counter -= 1
+
+        cur = next
+
     return result
-
-
 
 
 def print_alignment(s):
@@ -113,13 +155,14 @@ def print_alignment(s):
     while start_index > 0:
         end_index = max(0, start_index - BREAKOFF + 1)
         print_list = ['', '', '']
-        for i in range(start_index, end_index-1 , -1):
+        for i in range(start_index, end_index - 1, -1):
             print_list[0] += s[0][i]
             print_list[1] += '|' if s[0][i] == s[1][i] else ' '
             print_list[2] += s[1][i]
 
         for x in print_list: print(x)
         start_index -= BREAKOFF
+
 
 def main():
     """
@@ -132,7 +175,6 @@ def main():
 
     parser.add_argument('--check', action='store_true', help='check if your alignment is correct')
 
-
     arguments = parser.parse_args()
 
     if arguments.file:
@@ -144,30 +186,30 @@ def main():
 
     elif arguments.string:
         s1, s2 = arguments.string
-    
+
     if arguments.check:
         payload = json.dumps({
-            's1': s1, 
-            's2': s2, 
+            's1': s1,
+            's2': s2,
             'result': align(s1, s2, compute_backpointers(s1, s2))
         })
         response = requests.post(
             'https://language-engineering.herokuapp.com/correct',
-            data=payload, 
+            data=payload,
             headers={'content-type': 'application/json'}
         )
         response_data = response.json()
         if response_data['correct']:
-            print_alignment( align(s1, s2, compute_backpointers(s1, s2)))
+            print_alignment(align(s1, s2, compute_backpointers(s1, s2)))
             print('Success! Your results are correct')
         else:
             print('Your results:\n')
-            print_alignment( align(s1, s2, compute_backpointers(s1, s2)))
+            print_alignment(align(s1, s2, compute_backpointers(s1, s2)))
             print("The server's results\n")
             print_alignment(response_data['result'])
             print("Your results differ from the server's results")
     else:
-        print_alignment( align(s1, s2, compute_backpointers(s1, s2)))
+        print_alignment(align(s1, s2, compute_backpointers(s1, s2)))
 
 
 if __name__ == "__main__":
